@@ -1,219 +1,301 @@
 import streamlit as st
-import json
-from datetime import datetime
 from algolia_client import get_client, DEMO_PRODUCTS
+import time
 
 # Page config
 st.set_page_config(
-    page_title="Alkosto AI Assistant",
+    page_title="Alkosto - Asistente IA",
     page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# Initialize client
+# Initialize
 client = get_client()
 
-# CSS Styling
+# CSS for Chat-Interface
 st.markdown("""
 <style>
-    .chat-message {
+    .main {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .chat-container {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+    .welcome-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        text-align: center;
+        color: #1f2937;
+        margin-bottom: 0.5rem;
+    }
+    .welcome-subtitle {
+        font-size: 1.2rem;
+        text-align: center;
+        color: #6b7280;
+        margin-bottom: 2rem;
+    }
+    .suggestion-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        justify-content: center;
+        margin: 1rem 0;
+    }
+    .suggestion-pill {
+        background-color: #f3f4f6;
+        color: #374151;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        border: 1px solid #e5e7eb;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+    .suggestion-pill:hover {
+        background-color: #e5e7eb;
+        border-color: #d1d5db;
+    }
+    .message-bubble {
         padding: 1rem;
-        border-radius: 0.5rem;
+        border-radius: 1rem;
         margin-bottom: 1rem;
+        max-width: 80%;
     }
-    .chat-message.user {
-        background-color: #1e3a5f;
+    .message-user {
+        background-color: #3b82f6;
+        color: white;
+        margin-left: auto;
+        border-bottom-right-radius: 0.25rem;
     }
-    .chat-message.bot {
-        background-color: #2d3748;
+    .message-bot {
+        background-color: #f3f4f6;
+        color: #1f2937;
+        margin-right: auto;
+        border-bottom-left-radius: 0.25rem;
     }
     .product-card {
-        background-color: #1a202c;
+        background-color: white;
+        border: 1px solid #e5e7eb;
         border-radius: 0.75rem;
         padding: 1rem;
-        border: 1px solid #4a5568;
-        margin-bottom: 1rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
     }
-    .best-choice {
-        border: 2px solid #48bb78;
+    .product-title {
+        font-weight: 600;
+        color: #111827;
+        margin-bottom: 0.5rem;
     }
-    .alt-choice {
-        border: 2px solid #ed8936;
+    .product-price {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #059669;
+    }
+    .typing-indicator {
+        display: flex;
+        gap: 0.25rem;
+        padding: 1rem;
+    }
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        background-color: #9ca3af;
+        border-radius: 50%;
+        animation: typing 1.4s infinite;
+    }
+    .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes typing {
+        0%, 60%, 100% { transform: translateY(0); }
+        30% { transform: translateY(-10px); }
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar
-with st.sidebar:
-    st.title("🤖 Alkosto AI")
-    st.subheader("Tu asistente de laptops")
-    
-    st.markdown("---")
-    st.markdown("### ⚙️ Configuración")
-    
-    use_case = st.selectbox(
-        "🎯 ¿Para qué lo usarás?",
-        ["estudio", "oficina", "gaming", "diseño", "uso general"],
-        index=0
-    )
-    
-    budget = st.slider(
-        "💰 Presupuesto máximo (COP)",
-        min_value=1500000,
-        max_value=5000000,
-        value=2500000,
-        step=100000
-    )
-    st.markdown(f"**{budget:,} COP**")
-    
-    st.markdown("### ⚡ Prioridades")
-    priority_portable = st.checkbox("Portabilidad (ligero)", value=False)
-    priority_battery = st.checkbox("Batería (larga duración)", value=False)
-    
-    st.markdown("---")
-    
-    if st.button("🔄 Nueva búsqueda", type="primary"):
-        st.session_state.messages = []
-        st.session_state.stage = "greeting"
-        st.rerun()
-    
-    # Show mode indicator
-    if client.is_demo_mode:
-        st.warning("⚠️ Modo Demo: Usando datos de ejemplo")
-    else:
-        st.success("✅ Conectado a Algolia")
-
-# Main content
-st.title("💬 Chat con Alkosto AI")
-
-# Initialize session state
+# Session state
 if "messages" not in st.session_state:
     st.session_state.messages = []
-    st.session_state.stage = "greeting"
+    st.session_state.stage = "welcome"
+    st.session_state.context = {
+        "use_case": None,
+        "budget": None,
+        "priorities": []
+    }
 
-# Show chat messages
-for message in st.session_state.messages:
-    with st.chat_message(message["role"]):
-        st.markdown(message["content"])
+# Welcome Screen
+if st.session_state.stage == "welcome":
+    st.markdown('<h1 class="welcome-title">Hola, soy tu asesor experto en computadores 👋</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="welcome-subtitle">Encuentra tu portátil ideal sin tecnicismos. Cuéntame lo que buscas como si se lo contaras a un amigo.</p>', unsafe_allow_html=True)
+    
+    # Suggestion pills
+    st.markdown("""
+        <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: center; margin: 2rem 0;">
+    """, unsafe_allow_html=True)
+    
+    suggestions = [
+        "💻 Laptop para estudio",
+        "🎮 Laptop para gaming", 
+        "💼 Laptop para oficina",
+        "✈️ Laptop ligera para viajar",
+        "🔋 Laptop con buena batería"
+    ]
+    
+    cols = st.columns(3)
+    for i, suggestion in enumerate(suggestions):
+        with cols[i % 3]:
+            if st.button(suggestion, key=f"suggest_{i}", use_container_width=True):
+                st.session_state.messages.append({"role": "user", "content": suggestion.replace("💻 ", "").replace("🎮 ", "").replace("💼 ", "").replace("✈️ ", "").replace("🔋 ", "")})
+                st.session_state.stage = "chat"
+                st.rerun()
+    
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# Initial greeting
-if len(st.session_state.messages) == 0:
-    welcome = """
-    👋 ¡Hola! Soy tu asistente de ventas de **Alkosto**.
+# Chat Interface
+if st.session_state.stage == "chat":
+    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
     
-    Configura tu búsqueda en el panel izquierdo y escribe un mensaje para empezar.
+    # Display messages
+    for msg in st.session_state.messages:
+        if msg["role"] == "user":
+            st.markdown(f'<div class="message-bubble message-user">{msg["content"]}</div>', unsafe_allow_html=True)
+        else:
+            if msg.get("type") == "products":
+                # Product cards
+                for product in msg["products"]:
+                    st.markdown(f'''
+                        <div class="product-card">
+                            <div class="product-title">{product["name"]}</div>
+                            <div class="product-price">${product["price_sale"]:,} COP</div>
+                            <div style="margin-top: 0.5rem; color: #6b7280; font-size: 0.9rem;">
+                                💾 {product.get("ram", "N/A")} | ⚖️ {product.get("weight_kg", "N/A")} kg | 🔋 {product.get("battery_hours", "N/A")}h
+                            </div>
+                        </div>
+                    ''', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<div class="message-bubble message-bot">{msg["content"]}</div>', unsafe_allow_html=True)
     
-    Por ejemplo: *"Busco un laptop para estudio, ligero y con buena batería"*
-    """
-    st.session_state.messages.append({"role": "assistant", "content": welcome})
-    with st.chat_message("assistant"):
-        st.markdown(welcome)
+    # Quick reply suggestions
+    if len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] == "assistant":
+        st.markdown("<div style='margin: 1rem 0; text-align: center;'>", unsafe_allow_html=True)
+        st.caption("Sugerencias:")
+        
+        quick_replies = [
+            "Más barato",
+            "Más ligero", 
+            "Más potente",
+            "Ver alternativas"
+        ]
+        
+        cols = st.columns(4)
+        for i, reply in enumerate(quick_replies):
+            with cols[i]:
+                if st.button(reply, key=f"quick_{i}_{len(st.session_state.messages)}", use_container_width=True):
+                    process_message(reply)
+                    st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 
-# Chat input
-if prompt := st.chat_input("Escribe tu mensaje..."):
-    # Add user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+# Chat input at bottom
+if st.session_state.stage == "chat":
+    with st.container():
+        col1, col2 = st.columns([6, 1])
+        with col1:
+            user_input = st.text_input("Escribe tu mensaje...", key="chat_input", label_visibility="collapsed")
+        with col2:
+            if st.button("➤", use_container_width=True):
+                if user_input:
+                    process_message(user_input)
+                    st.rerun()
+
+def process_message(message):
+    """Process user message and generate response"""
+    st.session_state.messages.append({"role": "user", "content": message})
     
-    # Generate and show response
-    with st.chat_message("assistant"):
-        with st.spinner("Buscando laptops..."):
-            # Build filters
-            filters = [f"price_sale < {budget}", "in_stock:true"]
-            filter_desc = [f"💰 Menos de {budget:,} COP"]
+    # Show typing indicator
+    with st.spinner("Pensando..."):
+        time.sleep(0.5)
+        
+        # Parse intent from message
+        msg_lower = message.lower()
+        
+        # Extract use case
+        if "estudio" in msg_lower or "estudiante" in msg_lower:
+            st.session_state.context["use_case"] = "estudio"
+        elif "gaming" in msg_lower or "juego" in msg_lower:
+            st.session_state.context["use_case"] = "gaming"
+        elif "oficina" in msg_lower or "trabajo" in msg_lower:
+            st.session_state.context["use_case"] = "oficina"
+        elif "ligero" in msg_lower or "viaje" in msg_lower or "portatil" in msg_lower:
+            st.session_state.context["use_case"] = "portatil"
+        elif "bateria" in msg_lower:
+            st.session_state.context["use_case"] = "bateria"
+        
+        # Build filters based on context
+        filters = ["in_stock:true"]
+        
+        # Default budget if not set
+        if st.session_state.context["budget"] is None:
+            st.session_state.context["budget"] = 3000000
+        
+        filters.append(f"price_sale < {st.session_state.context['budget']}")
+        
+        # Use case specific filters
+        if st.session_state.context["use_case"] == "portatil":
+            filters.append("weight_kg < 1.5")
+        elif st.session_state.context["use_case"] == "bateria":
+            filters.append("battery_hours > 10")
+        
+        # Search
+        try:
+            result = client.search_products({
+                "query": st.session_state.context.get("use_case", "laptop"),
+                "filters": " AND ".join(filters),
+                "hits_per_page": 3
+            })
             
-            if priority_portable:
-                filters.append("weight_kg < 1.5")
-                filter_desc.append("⚖️ Menos de 1.5 kg")
-            
-            if priority_battery:
-                filters.append("battery_hours > 10")
-                filter_desc.append("🔋 Más de 10 horas")
-            
-            # Build query
-            query_map = {
-                "estudio": "laptop estudiante",
-                "oficina": "laptop oficina",
-                "gaming": "laptop gaming",
-                "diseño": "laptop diseño"
-            }
-            query = query_map.get(use_case, "laptop")
-            
-            # Search
-            try:
-                result = client.search_products({
-                    "query": query,
-                    "filters": " AND ".join(filters),
-                    "hits_per_page": 5
+            if result["hits"]:
+                # Generate bot response
+                best = result["hits"][0]
+                response = f"💡 Encontré **{result['total']} laptops** que pueden interesarte."
+                response += f"\n\n🏆 **Mi recomendación:** {best['name']}"
+                response += f"\n\n**Por qué es ideal para ti:**"
+                response += f"\n• Excelente relación precio/rendimiento"
+                response += f"\n• {best.get('ram', '8GB')} de RAM"
+                if best.get('weight_kg'):
+                    response += f"\n• Solo {best['weight_kg']} kg"
+                if best.get('battery_hours'):
+                    response += f"\n• Hasta {best['battery_hours']} horas de batería"
+                
+                response += f"\n\n💵 **Precio:** ${best['price_sale']:,} COP"
+                
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": response
                 })
                 
-                # Build response
-                response = f"""🔍 **Buscando laptops para {use_case}...**
-
-**Filtros aplicados:**
-{" • ".join(filter_desc)}
-
-**{result['total']} laptops encontrados**"""
+                # Add product cards
+                if len(result["hits"]) > 1:
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "type": "products",
+                        "products": result["hits"][:2]
+                    })
+            else:
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": "😕 No encontré laptops con esos criterios exactos. ¿Puedes darme más detalles sobre tu presupuesto o prioridades?"
+                })
                 
-                if result["hits"]:
-                    # Best choice
-                    best = result["hits"][0]
-                    response += f"""
-
----
-
-🏆 **MEJOR OPCIÓN: {best['name']}**
-
-💵 **{best['price_sale']:,} COP** | 💾 {best.get('ram', 'N/A')} | ⚖️ {best.get('weight_kg', 'N/A')} kg
-
-**Por qué es perfecto:**
-"""
-                    for feature in best.get('key_features', [])[:3]:
-                        response += f"- ✨ {feature}\n"
-                    
-                    response += f"\n[Ver en Alkosto ↗]({best['url']})"
-                    
-                    # Alternative
-                    if len(result["hits"]) > 1:
-                        alt = result["hits"][1]
-                        response += f"""
-
----
-
-🥈 **ALTERNATIVA: {alt['name']}**
-
-💵 {alt['price_sale']:,} COP | 💾 {alt.get('ram', 'N/A')}
-
-[Ver en Alkosto ↗]({alt['url']})
-"""
-                else:
-                    response += """
-
-😕 No se encontraron laptops con esos criterios exactos.
-
-💡 **Sugerencias:**
-- Aumenta el presupuesto
-- Reduce filtros (quita "ligero" o "batería")
-"""
-                
-                response += "\n\n¿Te gustaría ajustar los filtros o saber más? 🤔"
-                
-                st.markdown(response)
-                st.session_state.messages.append({"role": "assistant", "content": response})
-                
-            except Exception as e:
-                error_msg = f"❌ Error en la búsqueda: {str(e)}"
-                st.error(error_msg)
-                st.session_state.messages.append({"role": "assistant", "content": error_msg})
+        except Exception as e:
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": f"❌ Lo siento, tuve un problema buscando: {str(e)}"
+            })
 
 # Footer
 st.markdown("---")
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("📊 Ver Analytics"):
-        analytics = client.get_analytics()
-        st.json(analytics)
-with col2:
-    st.caption("Alkosto AI Assistant v0.1")
+st.caption("Alkosto AI Assistant v0.2 | Interface conversacional")
