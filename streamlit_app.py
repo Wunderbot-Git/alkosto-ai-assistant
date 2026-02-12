@@ -1,237 +1,107 @@
 import streamlit as st
-from algolia_client import get_client, DEMO_PRODUCTS
-import time
+import sys
+sys.path.insert(0, '/mount/src/alkosto-ai-assistant/src')
 
-# Page config
-st.set_page_config(
-    page_title="Alkosto - Asistente IA",
-    page_icon="🤖",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
+from agent import ConversationEngine, ProductEvaluator
+from algolia_client import get_client
+
+st.set_page_config(page_title="Alkosto AI", page_icon="🤖", layout="centered")
 
 # Initialize
-client = get_client()
-
-# CSS - nur für Container, nicht für Widgets
-st.markdown("""
-<style>
-    .main {
-        max-width: 800px;
-        margin: 0 auto;
-    }
-    .stTextInput > div > div > input {
-        border-radius: 25px;
-        padding: 12px 20px;
-        border: 2px solid #e5e7eb;
-        font-size: 16px;
-    }
-    .stButton > button {
-        border-radius: 25px;
-        padding: 12px 24px;
-        background-color: #3b82f6;
-        color: white;
-        border: none;
-        font-weight: 500;
-    }
-    .stButton > button:hover {
-        background-color: #2563eb;
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Session state
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "engine" not in st.session_state:
+    st.session_state.engine = ConversationEngine()
+    st.session_state.client = get_client()
     st.session_state.stage = "welcome"
-    st.session_state.context = {
-        "use_case": None,
-        "budget": None,
-        "priorities": []
-    }
 
-def process_message(message):
-    """Process user message and generate response"""
-    st.session_state.messages.append({"role": "user", "content": message})
-    
-    # Parse intent from message
-    msg_lower = message.lower()
-    
-    # Extract use case
-    if "estudio" in msg_lower or "estudiante" in msg_lower:
-        st.session_state.context["use_case"] = "estudio"
-    elif "gaming" in msg_lower or "juego" in msg_lower:
-        st.session_state.context["use_case"] = "gaming"
-    elif "oficina" in msg_lower or "trabajo" in msg_lower:
-        st.session_state.context["use_case"] = "oficina"
-    elif "ligero" in msg_lower or "viaje" in msg_lower or "portatil" in msg_lower:
-        st.session_state.context["use_case"] = "portatil"
-    elif "bateria" in msg_lower:
-        st.session_state.context["use_case"] = "bateria"
-    
-    # Build filters
-    filters = ["in_stock:true"]
-    
-    # Default budget if not set
-    if st.session_state.context["budget"] is None:
-        st.session_state.context["budget"] = 3000000
-    
-    filters.append(f"price_sale < {st.session_state.context['budget']}")
-    
-    # Use case specific filters
-    if st.session_state.context["use_case"] == "portatil":
-        filters.append("weight_kg < 1.5")
-    elif st.session_state.context["use_case"] == "bateria":
-        filters.append("battery_hours > 10")
-    
-    # Search
-    try:
-        result = client.search_products({
-            "query": st.session_state.context.get("use_case", "laptop"),
-            "filters": " AND ".join(filters),
-            "hits_per_page": 3
-        })
-        
-        if result["hits"]:
-            # Generate bot response
-            best = result["hits"][0]
-            response = f"💡 Encontré **{result['total']} laptops** que pueden interesarte."
-            response += f"\n\n🏆 **Mi recomendación:** {best['name']}"
-            response += f"\n\n**Por qué es ideal para ti:**"
-            response += f"\n• Excelente relación precio/rendimiento"
-            response += f"\n• {best.get('ram', '8GB')} de RAM"
-            if best.get('weight_kg'):
-                response += f"\n• Solo {best['weight_kg']} kg"
-            if best.get('battery_hours'):
-                response += f"\n• Hasta {best['battery_hours']} horas de batería"
-            
-            response += f"\n\n💵 **Precio:** ${best['price_sale']:,} COP"
-            
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": response
-            })
-            
-            # Add product cards if multiple results
-            if len(result["hits"]) > 1:
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "type": "products",
-                    "products": result["hits"][:2]
-                })
-        else:
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": "😕 No encontré laptops con esos criterios exactos. ¿Puedes darme más detalles sobre tu presupuesto o prioridades?"
-            })
-            
-    except Exception as e:
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": f"❌ Lo siento, tuve un problema buscando."
-        })
+st.title("🤖 Alkosto AI Assistant")
 
-# Welcome Screen
+# Welcome
 if st.session_state.stage == "welcome":
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; font-size: 2.5rem;'>👋 Hola, soy tu asesor experto en computadores</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; font-size: 1.2rem; color: #6b7280;'>Encuentra tu portátil ideal sin tecnicismos. Cuéntame lo que buscas.</p>", unsafe_allow_html=True)
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.write("👋 ¡Hola! Soy tu asesor experto en computadores.")
+    st.write("Te ayudaré a encontrar la laptop perfecta. Contéstame algunas preguntas...")
     
-    # Suggestion buttons
-    st.markdown("<p style='text-align: center; color: #9ca3af;'>Sugerencias:</p>", unsafe_allow_html=True)
+    welcome_msg = st.session_state.engine.get_welcome_message()
+    st.info(welcome_msg)
     
-    suggestions_row1 = st.columns(3)
-    with suggestions_row1[0]:
-        if st.button("💻 Laptop para estudio", use_container_width=True):
-            process_message("Laptop para estudio")
-            st.session_state.stage = "chat"
-            st.rerun()
-    with suggestions_row1[1]:
-        if st.button("🎮 Gaming", use_container_width=True):
-            process_message("Laptop para gaming")
-            st.session_state.stage = "chat"
-            st.rerun()
-    with suggestions_row1[2]:
-        if st.button("💼 Oficina", use_container_width=True):
-            process_message("Laptop para oficina")
-            st.session_state.stage = "chat"
-            st.rerun()
-    
-    suggestions_row2 = st.columns(3)
-    with suggestions_row2[0]:
-        if st.button("✈️ Ligero para viajar", use_container_width=True):
-            process_message("Laptop ligera para viajar")
-            st.session_state.stage = "chat"
-            st.rerun()
-    with suggestions_row2[1]:
-        if st.button("🔋 Buena batería", use_container_width=True):
-            process_message("Laptop con buena batería")
-            st.session_state.stage = "chat"
-            st.rerun()
-    with suggestions_row2[2]:
-        if st.button("💰 Menos de 2M COP", use_container_width=True):
-            process_message("Laptop barata menos de 2 millones")
-            st.session_state.stage = "chat"
-            st.rerun()
-    
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    
-    # Free input
-    user_input = st.text_input("O escribe tu búsqueda...", key="welcome_input", placeholder="Ej: Necesito laptop para universidad, ligera y barata")
-    if st.button("Buscar 🔍", type="primary", use_container_width=True):
-        if user_input:
-            process_message(user_input)
-            st.session_state.stage = "chat"
-            st.rerun()
+    if st.button("Empezar"):
+        st.session_state.stage = "chat"
+        st.rerun()
 
-# Chat Interface
+# Chat
 if st.session_state.stage == "chat":
-    # Display messages
-    for msg in st.session_state.messages:
-        if msg["role"] == "user":
-            with st.chat_message("user"):
-                st.write(msg["content"])
-        else:
-            if msg.get("type") == "products":
-                st.markdown("---")
-                st.markdown("**También te pueden interesar:**")
-                for product in msg["products"]:
-                    with st.container():
-                        st.markdown(f"**{product['name']}**")
-                        st.markdown(f"💵 ${product['price_sale']:,} COP | 💾 {product.get('ram', 'N/A')} | ⚖️ {product.get('weight_kg', 'N/A')} kg")
-                        if st.button(f"Ver detalles ↗", key=f"link_{product['objectID']}"):
-                            st.markdown(f"[Abrir en Alkosto]({product['url']})")
-                        st.markdown("---")
-            else:
-                with st.chat_message("assistant"):
-                    st.markdown(msg["content"])
+    # Show history
+    for msg in st.session_state.engine.context.messages:
+        with st.chat_message(msg["role"]):
+            st.write(msg["content"])
     
-    # Quick replies after last message
-    if len(st.session_state.messages) > 0 and st.session_state.messages[-1]["role"] == "assistant":
-        st.markdown("<p style='color: #9ca3af; font-size: 0.9rem;'>Sugerencias:</p>", unsafe_allow_html=True)
-        cols = st.columns(4)
-        quick_replies = ["Más barato", "Más ligero", "Más potente", "Ver alternativas"]
-        for i, reply in enumerate(quick_replies):
-            with cols[i]:
-                if st.button(reply, key=f"quick_{i}_{len(st.session_state.messages)}", use_container_width=True):
-                    process_message(reply)
-                    st.rerun()
+    # Check if ready to search
+    if st.session_state.engine.context.profile.is_ready_for_search(0.8):
+        if not st.session_state.engine.context.search_results:
+            st.info("🔍 Buscando productos...")
+            
+            # Build filters
+            profile = st.session_state.engine.context.profile
+            filters = [f"price_sale <= {profile.budget.max}", "in_stock:true"] if profile.budget.max else ["in_stock:true"]
+            
+            if profile.must_haves.max_weight_kg:
+                filters.append(f"weight_kg <= {profile.must_haves.max_weight_kg}")
+            if profile.must_haves.min_battery_hours:
+                filters.append(f"battery_hours >= {profile.must_haves.min_battery_hours}")
+            
+            # Search
+            result = st.session_state.client.search_products({
+                "query": profile.use_case or "laptop",
+                "filters": " AND ".join(filters),
+                "hits_per_page": 10
+            })
+            
+            st.session_state.engine.set_search_results(result["hits"])
+            
+            # Evaluate and get top 2
+            evaluator = ProductEvaluator(profile)
+            scored = evaluator.evaluate(result["hits"], 2)
+            
+            recommendations = []
+            for i, s in enumerate(scored, 1):
+                rec = evaluator.format_recommendation(s, i)
+                recommendations.append(rec)
+            
+            st.session_state.engine.set_recommendations(recommendations)
+            st.rerun()
     
-    st.markdown("<br>", unsafe_allow_html=True)
+    # Show recommendations
+    if st.session_state.engine.context.recommendations:
+        st.success("🎉 Aquí están mis recomendaciones:")
+        
+        for rec in st.session_state.engine.context.recommendations:
+            with st.container():
+                cols = st.columns([3, 1])
+                with cols[0]:
+                    st.subheader(f"{'🏆' if rec['rank'] == 1 else '🥈'} {rec['name']}")
+                    st.write(f"**{rec['price_formatted']}** | Match: {rec['match_percentage']}%")
+                    st.write(rec['explanation'])
+                    st.write(f"💾 {rec['specs']['ram']} | ⚖️ {rec['specs']['weight']} | 🔋 {rec['specs']['battery']}")
+                with cols[1]:
+                    if st.button(f"Ver detalles", key=f"btn_{rec['object_id']}"):
+                        st.markdown(f"[Abrir en Alkosto]({rec['url']})")
+                st.divider()
     
-    # Chat input at bottom
-    user_msg = st.chat_input("Escribe tu mensaje...")
+    # Chat input
+    user_msg = st.chat_input("Tu respuesta...")
     if user_msg:
-        process_message(user_msg)
-        st.rerun()
+        result = st.session_state.engine.process_user_message(user_msg)
+        
+        # Check if search triggered
+        if result.get("ready_to_search") and not st.session_state.engine.context.search_results:
+            st.rerun()
+        else:
+            st.rerun()
     
-    # Back to welcome button
-    if st.button("← Nueva búsqueda", type="secondary"):
-        st.session_state.messages = []
-        st.session_state.stage = "welcome"
+    # Reset button
+    if st.button("🔄 Nueva conversación"):
+        st.session_state.engine = ConversationEngine()
+        st.session_state.engine.context.search_results = []
+        st.session_state.engine.context.recommendations = []
         st.rerun()
 
-# Footer
-st.markdown("---")
-st.caption("Alkosto AI Assistant v0.3 | Powered by Algolia + Streamlit")
+st.caption("Alkosto AI v1.0 | Powered by Gemini + Algolia")
