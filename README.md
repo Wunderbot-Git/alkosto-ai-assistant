@@ -1,60 +1,71 @@
-# 🤖 Alkosto AI Sales Assistant
+# Alkosto AI Assistant
 
-AI-gestützter Verkaufsassistent für Alkosto (kolumbianischer Elektronik-Händler).
-Berät Kunden bei der Laptop-Auswahl aus einem Katalog von 317 Produkten.
+AI Sales Assistant für Alkosto mit Streamlit Cloud Deployment.
 
-## 🚀 Quick Start
+## 🚀 Quick Deploy
 
-### Option 1: CLI (Node.js)
-```bash
-cd /home/alkosto-assistant
-npm install
-node src/cli.js
+### Schritt 1: GitHub
+Repository: `https://github.com/Wunderbot-Git/alkosto-ai-assistant`
+
+### Schritt 2: Streamlit Cloud
+1. Gehe zu https://share.streamlit.io
+2. Sign in mit GitHub
+3. Click "New app"
+4. Repository: `Wunderbot-Git/alkosto-ai-assistant`
+5. Main file path: `streamlit_app.py`
+6. Click "Deploy"
+
+### Schritt 3: Secrets konfigurieren
+1. In Streamlit Cloud → App → Settings → Secrets
+2. Füge hinzu:
+```toml
+ALGOLIA_API_KEY = "a0e524e91a99723b11a1ea7bab1e504a"
 ```
 
-### Option 2: Streamlit UI (Python)
-```bash
-cd /home/alkosto-assistant
-pip install streamlit
-streamlit run src/app.py
-```
+### Schritt 4: Fertig!
+Die App läuft unter: `https://alkosto-ai-assistant-XXXX.streamlit.app`
 
-### Option 3: Query Test
-```bash
-node src/test-query.js
-```
+## 🎯 Features
+
+- ✅ Konversationsbasierte Laptop-Beratung
+- ✅ Algolia-Suche mit 317 Produkten
+- ✅ Intelligente Filter (Budget, Gewicht, Akku)
+- ✅ Produkt-Empfehlungen mit Begründungen
+- ✅ Responsive Design für Desktop & Mobile
+- ✅ Demo-Mode als Fallback
 
 ## 📁 Struktur
 
 ```
-alkosto-assistant/
+alkosto-ai-assistant/
+├── streamlit_app.py          # Haupt-App
 ├── src/
-│   ├── cli.js              # CLI Prototyp
-│   ├── test-query.js       # Query Generator Test
-│   ├── app.py              # Streamlit UI
-│   ├── algoliaClient.js    # Algolia API Client
-│   └── prompts/
-│       └── systemPrompt.js # System Prompt für Claude
-├── data/                   # Lokale Daten
-├── tests/                  # Tests
-└── docs/                   # Dokumentation
+│   └── algolia_client.py     # Algolia Client (Python)
+├── requirements.txt          # Python Dependencies
+└── .streamlit/
+    └── secrets.toml          # Secrets Template
 ```
 
-## 🔧 Konfiguration
+## 🔧 Lokale Entwicklung
 
-Für echte Algolia-Daten, erstelle `.env`:
+```bash
+pip install -r requirements.txt
+export ALGOLIA_API_KEY="a0e524e91a99723b11a1ea7bab1e504a"
+streamlit run streamlit_app.py
 ```
-ALGOLIA_API_KEY=your_search_api_key
+
+## 🧪 Tests
+
+```bash
+pytest test_algolia_client.py -v
 ```
 
-Ohne API Key läuft der Assistant im Demo-Modus mit Beispiel-Daten.
+## 📊 Algolia Index
 
-## 🎯 Features
+- **App ID:** QX5IPS1B1Q
+- **Index:** test_Philipp
+- **Produkte:** 317 Laptops & Tablets
 
-- ✅ Bedarfsanalyse (Use Case, Budget, Prioritäten)
-- ✅ Automatische Algolia-Query-Generierung
-- ✅ Produkt-Empfehlungen mit Begründungen
-- ✅ Guardrails (Budget-Check, Verfügbarkeit)
-- 🔄 Streamlit Chat-Interface
-- ⏳ Echte Algolia-Integration (wenn API Key)
+---
 
+Erstellt für Philipp Hasskamp | AI Pro Kurs
